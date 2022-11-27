@@ -100,7 +100,10 @@ class Value:
         self.cached_data = self.op.compute(
             *[x.realize_cached_data() for x in self.inputs]
         )
-        self.cached_data
+        # if self.cached_data.dtype != self.inputs[0].dtype:
+        #     print("Warning: dtype mismatch in op: %s" % self.op)
+        #     print("self.cached_data.dtype: %s. self.inputs[0].dtype: %s" % (self.cached_data.dtype , self.inputs[0].dtype))
+        # assert self.cached_data.dtype == self.inputs[0].dtype  # ADDED
         return self.cached_data
 
     def is_leaf(self):
@@ -259,6 +262,7 @@ class Tensor(Value):
     def data(self):
         return self.detach()
 
+    # hbsun: https://www.geeksforgeeks.org/getter-and-setter-in-python/
     @data.setter
     def data(self, value):
         assert isinstance(value, Tensor)
@@ -314,9 +318,7 @@ class Tensor(Value):
             return needle.ops.MulScalar(other)(self)
 
     def __pow__(self, other):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        return needle.ops.PowerScalar(other)(self)
 
     def __sub__(self, other):
         if isinstance(other, Tensor):
@@ -368,12 +370,31 @@ def compute_gradient_of_variables(output_tensor, out_grad):
     # We are really taking a derivative of the scalar reduce_sum(output_node)
     # instead of the vector output_node. But this is the common case for loss function.
     node_to_output_grads_list[output_tensor] = [out_grad]
+
     # Traverse graph in reverse topological order given the output_node that we are taking gradient wrt.
     reverse_topo_order = list(reversed(find_topo_sort([output_tensor])))
 
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
+    for i in reverse_topo_order:
+        # hbsun: sum will change the dtype if the list only has one element. So let's mitigate it by condition check.
+        # if len(node_to_output_grads_list[i]) == 1:
+        #     vi = node_to_output_grads_list[i][0]
+        # else:
+        #     vi = sum(node_to_output_grads_list[i])
+        vi = sum_node_list(node_to_output_grads_list[i])
+        i.grad = vi
+
+        if i.op is None:
+            continue
+        gradients = i.op.gradient(vi, i)
+        if isinstance(gradients, Tensor):
+            gradients = [gradients]
+        elif isinstance(gradients, tuple):
+            gradients = list(gradients)
+
+        for k, g in zip(i.inputs, gradients):
+            if k not in node_to_output_grads_list:
+                node_to_output_grads_list[k] = []
+            node_to_output_grads_list[k].append(g)
 
 
 def find_topo_sort(node_list: List[Value]) -> List[Value]:
@@ -384,16 +405,21 @@ def find_topo_sort(node_list: List[Value]) -> List[Value]:
     after all its predecessors are traversed due to post-order DFS, we get a topological
     sort.
     """
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
+    topo_order = []
+    for node in node_list:
+        topo_sort_dfs(node, set(), topo_order)
+    return topo_order
 
 
 def topo_sort_dfs(node, visited, topo_order):
     """Post-order DFS"""
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
+    inputs = node.inputs
+    for input_node in inputs:
+        if input_node not in visited:
+            visited.add(input_node)
+            topo_sort_dfs(input_node, visited, topo_order)
+    topo_order.append(node)
+
 
 
 ##############################

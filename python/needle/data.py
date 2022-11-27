@@ -12,7 +12,7 @@ class Transform:
 
 
 class RandomFlipHorizontal(Transform):
-    def __init__(self, p=0.5):
+    def __init__(self, p = 0.5):
         self.p = p
 
     def __call__(self, img):
@@ -25,9 +25,9 @@ class RandomFlipHorizontal(Transform):
         Note: use the provided code to provide randomness, for easier testing
         """
         flip_img = np.random.rand() < self.p
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        if flip_img:
+            img = np.flip(img, axis=1)
+        return img
 
 
 class RandomCrop(Transform):
@@ -35,19 +35,24 @@ class RandomCrop(Transform):
         self.padding = padding
 
     def __call__(self, img):
-        """Zero pad and then randomly crop an image.
+        """ Zero pad and then randomly crop an image.
+        Padding is added to all side of the image, and then the image is cropped back to its original size at a random location.
         Args:
              img: H x W x C NDArray of an image
         Return
-            H x W x C NAArray of cliped image
+            H x W x C NAArray of clipped image
         Note: generate the image shifted by shift_x, shift_y specified below
         """
         shift_x, shift_y = np.random.randint(
             low=-self.padding, high=self.padding + 1, size=2
         )
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+
+       # hbsun impl:
+        img = np.pad(img, ((self.padding, self.padding), (self.padding, self.padding), (0, 0)), 'constant')
+        shift_x = np.random.randint(0, self.padding * 2 + 1)
+        shift_y = np.random.randint(0, self.padding * 2 + 1)
+        img = img[shift_x:shift_x + img.shape[0] - self.padding * 2, shift_y:shift_y + img.shape[1] - self.padding * 2, :]
+        return img
 
 
 class Dataset:
@@ -56,6 +61,13 @@ class Dataset:
     All subclasses should overwrite :meth:`__getitem__`, supporting fetching a
     data sample for a given key. Subclasses must also overwrite
     :meth:`__len__`, which is expected to return the size of the dataset.
+
+    Each Dataset subclass must implement three functions: __init__, __len__, and __getitem__.
+    The __init__ function initializes the images, labels, and transforms.
+    The __len__ function returns the number of samples in the dataset.
+    The __getitem__ function retrieves a sample from the dataset at a given index idx,
+    calls the transform functions on the image (if applicable),
+    converts the image and label to a numpy array (the data will be converted to Tensors elsewhere).
     """
 
     def __init__(self, transforms: Optional[List] = None):
@@ -85,7 +97,7 @@ class DataLoader:
             (default: ``1``).
         shuffle (bool, optional): set to ``True`` to have the data reshuffled
             at every epoch (default: ``False``).
-    """
+     """
     dataset: Dataset
     batch_size: Optional[int]
 
@@ -99,20 +111,26 @@ class DataLoader:
         self.dataset = dataset
         self.shuffle = shuffle
         self.batch_size = batch_size
-        if not self.shuffle:
-            self.ordering = np.array_split(
-                np.arange(len(dataset)), range(batch_size, len(dataset), batch_size)
-            )
 
     def __iter__(self):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        if not self.shuffle:
+            self.ordering = np.array_split(np.arange(len(self.dataset)), range(self.batch_size, len(self.dataset), self.batch_size))
+        else:
+            l = np.arange(len(self.dataset))
+            np.random.shuffle(l)
+            self.ordering = np.array_split(l, range(self.batch_size, len(self.dataset), self.batch_size))
         return self
 
     def __next__(self):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        if len(self.ordering) == 0:
+            raise StopIteration
+        ind = self.ordering.pop(0)
+        x = Tensor(np.array([self.dataset[i][0] for i in ind]))
+        y = None
+        if len(self.dataset[0]) > 1:
+            y = Tensor(np.array([self.dataset[i][1] for i in ind]))
+        return (x, y)
         ### END YOUR SOLUTION
 
 
@@ -123,19 +141,15 @@ class MNISTDataset(Dataset):
         label_filename: str,
         transforms: Optional[List] = None,
     ):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        super().__init__(transforms)
+        self.X, self.y = parse_mnist(image_filename, label_filename)
+        self.X = np.reshape(self.X, (self.X.shape[0], 28, 28, 1))
 
     def __getitem__(self, index) -> object:
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        return self.apply_transforms(self.X[index]), self.y[index]
 
     def __len__(self) -> int:
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        return self.X.shape[0]
 
 
 class CIFAR10Dataset(Dataset):
@@ -155,30 +169,55 @@ class CIFAR10Dataset(Dataset):
         X - numpy array of images
         y - numpy array of labels
         """
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        with open(os.path.join(base_folder, "batches.meta"), "rb") as fo:
+            self.label_names = pickle.load(fo, encoding="bytes")[b"label_names"]
+        self.train = train
+        self.transforms = transforms
+        self.p = p
+        if self.train:
+            self.data = []
+            self.labels = []
+            for i in range(1, 6):
+                with open(os.path.join(base_folder, f"data_batch_{i}"), "rb") as fo:
+                    entry = pickle.load(fo, encoding="bytes")
+                    self.data.append(entry[b"data"])
+                    if b"labels" in entry:
+                        self.labels.append(entry[b"labels"])
+                    else:
+                        self.labels.append(entry[b"fine_labels"])
+            self.data = np.vstack(self.data).reshape(-1, 3, 32, 32)
+            self.labels = np.hstack(self.labels)
+        else:
+            with open(os.path.join(base_folder, "test_batch"), "rb") as fo:
+                entry = pickle.load(fo, encoding="bytes")
+                self.data = entry[b"data"].reshape(-1, 3, 32, 32)
+                if b"labels" in entry:
+                    self.labels = entry[b"labels"]
+                else:
+                    self.labels = entry[b"fine_labels"]
+
+        self.data = self.data / 255.
 
     def __getitem__(self, index) -> object:
         """
         Returns the image, label at given index
         Image should be of shape (3, 32, 32)
         """
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        return self.apply_transforms(self.data[index]).reshape(3, 32, 32), self.labels[index]
+
 
     def __len__(self) -> int:
         """
         Returns the total number of examples in the dataset
         """
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        return self.data.shape[0]
+
 
 
 class NDArrayDataset(Dataset):
     def __init__(self, *arrays):
+        # hbsun: I think it's should be added.
+        super().__init__()
         self.arrays = arrays
 
     def __len__(self) -> int:

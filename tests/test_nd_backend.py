@@ -144,17 +144,57 @@ def test_tanh_backward(shape, device):
 
 STACK_PARAMETERS = [((5, 5), 0, 1),
     ((5, 5), 0, 2),
-    ((1,5,7), 2, 5)]
+    ((1,5,7), 2, 5),
+    ((2,5,7), 2, 6)]
 @pytest.mark.parametrize("shape, axis, l", STACK_PARAMETERS)
 @pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
 def test_stack(shape, axis, l, device):
     _A = [np.random.randn(*shape).astype(np.float32) for i in range(l)]
     A = [ndl.Tensor(nd.array(_A[i]), device=device) for i in range(l)]
     A_t = [torch.Tensor(_A[i]) for i in range(l)]
-    out = ndl.stack(A, axis=axis)
     out_t = torch.stack(A_t, dim=axis)
+    # print("A_t shape", A_t[0].shape)
+    # print("out_t shape", out_t.shape)
+    out = ndl.stack(A, axis=axis)
+    # print("out_t:")
+    # print(out_t.numpy().shape)
+    # print("out:")
+    # print(out.numpy().shape)
     np.testing.assert_allclose(out_t.numpy(), out.numpy(), atol=1e-5, rtol=1e-5)
 
+# @pytest.mark.parametrize("shape, axis, l", STACK_PARAMETERS)
+# @pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
+# def test_split(shape, axis, l, device):
+#     _A = [np.random.randn(*shape).astype(np.float32) for i in range(l)]
+#     A_t = [torch.Tensor(_A[i]) for i in range(l)]
+#     out_t = torch.stack(A_t, dim=axis)
+#     print("stack out_t shape", out_t.shape, out_t[0].shape)
+#     out_t = torch.split(out_t, 1, dim=axis)
+#     print("split out_t shape", len(out_t), out_t[0].shape)
+#     print("\nout_t:\n")
+#     print(out_t, "\n")
+#     # print("A_t shape", A_t[0].shape)
+#
+#     A = [ndl.Tensor(nd.array(_A[i]), device=device) for i in range(l)]
+#     stack_out = ndl.stack(A, axis=axis)
+#     # print("\nstack_out\n:", stack_out.shape)
+#     out = ndl.split(stack_out, axis=axis)
+#     print("\nout shape:", out.numpy().shape)
+#     # print("out_t:")
+#     # print(out_t.numpy().shape)
+#     # print("out\n:")
+#     # print(out.numpy().shape)
+#     # for i in range(l):
+#     #     print(out[i,:,:,:].numpy())
+#     # print("out:\n", out.shape)
+#     for i in range(l):
+#         # print("index=", i, out_t[i].numpy().shape, out[i,:,:,:,:].numpy().shape)
+#         # print("out_t[i]:\n", out_t[i].numpy())
+#         # print("out[i]:\n", out[i,:,:,:,:].numpy())
+#         if len(out_t[i].shape) == 4:
+#             np.testing.assert_allclose(out_t[i].numpy(), out[i,:,:,:,:].numpy().reshape(out_t[i].numpy().shape), atol=1e-5, rtol=1e-5)
+#         else:
+#             np.testing.assert_allclose(out_t[i].numpy(), out[i,:,:,:].numpy().reshape(out_t[i].numpy().shape), atol=1e-5, rtol=1e-5)
 
 @pytest.mark.parametrize("shape, axis, l", STACK_PARAMETERS)
 @pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
@@ -361,6 +401,7 @@ def submit_new_nd_backend():
         A = ndl.Tensor(nd.array(_A), device=device)
         mugrade_submit(ndl.logsumexp(A, axes).numpy())
         mugrade_submit(backward_check(ndl.logsumexp, A, axes=axes))
+    print("submit_new_nd_backend finished")
 
 
 if __name__ == "__main__":

@@ -102,7 +102,7 @@ class NDArray:
             # create a copy of existing NDArray
             if device is None:
                 device = other.device
-            self._init(other.to(device) + 0.0)  # this creates a copy
+            self._init(other.to(device) + 0.0)  # this creates a copy. hbsun: shadow copy that share the same memory
         elif isinstance(other, np.ndarray):
             # create copy from numpy array
             device = device if device is not None else default_device()
@@ -124,6 +124,9 @@ class NDArray:
     @staticmethod
     def compact_strides(shape):
         """ Utility function to compute compact strides """
+        """ hbsun: shape=[1,2,4], output=(8, 4, 1)"""
+        """ hbsun: shape=[2,3,4], output=(12, 4, 1)"""
+        """ hbsun: shape=[2,3,1], output=(3, 1, 1)"""
         stride = 1
         res = []
         for i in range(1, len(shape) + 1):
@@ -201,6 +204,7 @@ class NDArray:
     def is_compact(self):
         """Return true if array is compact in memory and internal size equals product
         of the shape dimensions"""
+        # hbsun: also need judge size because stride cannot know the first dimension
         return (
             self._strides == self.compact_strides(self._shape)
             and prod(self.shape) == self._handle.size
@@ -242,12 +246,13 @@ class NDArray:
             new_shape (tuple): new shape of the array
 
         Returns:
-            NDArray : reshaped array; this will point to thep
+            NDArray : reshaped array; this will point to the same memory as the original NDArray.
         """
-
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        if prod(self.shape) != prod(new_shape):
+            raise ValueError("cannot reshape array of size {} into shape {}".format(prod(self.shape), new_shape))
+        if not self.is_compact():
+            raise ValueError("cannot reshape non-compact array")
+        return self.as_strided(new_shape, self.compact_strides(new_shape))
 
     def permute(self, new_axes):
         """
@@ -269,10 +274,11 @@ class NDArray:
             to the same memory as the original NDArray (i.e., just shape and
             strides changed).
         """
-
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        assert len(new_axes) == self.ndim
+        return self.as_strided(
+            shape=tuple(self.shape[i] for i in new_axes),
+            strides=tuple(self.strides[i] for i in new_axes),
+        )
 
     def broadcast_to(self, new_shape):
         """
@@ -292,10 +298,44 @@ class NDArray:
         Returns:
             NDArray: the new NDArray object with the new broadcast shape; should
             point to the same memory as the original array.
+
+        hbsun:
+        First let me show how stride work:
+        1. The stride is the number of elements to skip to get to the next element in the same dimension.
+        2. The stride of the last dimension is always 1.
+        3. The stride of the second last dimension is the size of the last dimension.
+        4. The stride of the third last dimension is the size of the last two dimensions.
+        5. The stride of the fourth last dimension is the size of the last three dimensions.
+        6. And so on.
+        7. For example, if you have a 3x4x5x6 array, the strides will be (120, 30, 6, 1).
+        8. For another example, if you have a 2x1x3 array, the strides will be (3, 3, 1).
+        9. And if you want to visit the first element in the third dimension, the index is 1*3 + 0*3 + 0*1 = 3.
+
+        Second, let me show how broadcast work:
+        1. The broadcast is to expand the dimension of the array to match the shape.
+        2. Please note that we broadcast can only expand the dimension which size is 1.
+        3. For the above example, we can broadcast the 2x1x3 array to 2x4x3 array.
+
+        Third, let me show how to calculate the stride of the broadcast array:
+        1. We need change the stride to make sure we can visit the element in the original array correctly. That is:
+            1) The dimension which size is not 1 will have the stride of the original array.
+            2) The dimension which size is 1 will have the stride of 0.
+        2. For the above example, the expanded dimension is the second dimension.
+            1) For its original shape, its index is always 0 zero because the size is 1.
+            2) For its expanded shape, its index is 0, 1, 2, 3.
+               But we need to make sure visit the element by these index will actually visit the element by index==0.
+               So we have to make the stride of the second dimension to be 0.
+        3. For the above example, the stride of the broadcast array should be (3, 0, 1).
         """
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        assert len(new_shape) == self.ndim
+        new_strides = []
+        for i in range(self.ndim):
+            if self.shape[i] == 1:
+                new_strides.append(0)
+            else:
+                assert self.shape[i] == new_shape[i]
+                new_strides.append(self.strides[i])
+        return self.as_strided(new_shape, tuple(new_strides))
 
     ### Get and set elements
 
@@ -305,7 +345,7 @@ class NDArray:
         if start == None:
             start = 0
         if start < 0:
-            start = self.shape[dim]
+            start = self.shape[dim] + start # hbsun: maybe bug
         if stop == None:
             stop = self.shape[dim]
         if stop < 0:
@@ -347,6 +387,12 @@ class NDArray:
             subset of elements.  As before, this should not copy memroy but just
             manipulate the shape/strides/offset of the new array, referecing
             the same array as the original one.
+
+        hbsun:
+        x=np.arange(0, 20).reshape(5,4)
+        x[1:3:1,0:4:2]
+        array([[4,  6],
+               [8, 10]])
         """
 
         # handle singleton as tuple, everything as slices
@@ -360,9 +406,16 @@ class NDArray:
         )
         assert len(idxs) == self.ndim, "Need indexes equal to number of dimensions"
 
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        shape = []
+        strides = []
+        offset = 0
+        for i, sl in enumerate(idxs):
+            shape.append(len(range(*sl.indices(self.shape[i]))))
+            strides.append(self.strides[i] * sl.step)
+            offset += self.strides[i] * sl.start
+        return NDArray.make(
+            shape=tuple(shape), strides=tuple(strides), device=self.device, handle=self._handle, offset=offset
+        )
 
     def __setitem__(self, idxs, other):
         """Set the values of a view into an array, using the same semantics
@@ -515,6 +568,7 @@ class NDArray:
             out = NDArray.make((a.shape[0], b.shape[1], t, t), device=self.device)
             self.device.matmul_tiled(a._handle, b._handle, out._handle, m, n, p)
 
+            print("tiled matmul", a.shape, b.shape, out.shape)
             return (
                 out.permute((0, 2, 1, 3))
                 .compact()
@@ -526,9 +580,21 @@ class NDArray:
             self.device.matmul(
                 self.compact()._handle, other.compact()._handle, out._handle, m, n, p
             )
+            print("untiled matmul", m, n, p)
             return out
 
     ### Reductions, i.e., sum/max over all element or over given axis
+    """
+    hbsun:
+    For example1, x=np.arange(12).reshape(4,3)
+    reduce_view_out(x) return:
+    view=array([[[ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11]]]) from shape=(1, 1, 12)
+    out=array([]) from shape=(1, 1) because the sum/max result is a scalar
+    For example2, x=np.arange(12).reshape(4,3)
+    reduce_view_out(x, axis=0) return:
+    view=array([[0, 3, 6, 9], [1, 4, 7, 10], [2, 5, 8, 11]]) from shape=(3, 4)
+    out=array([,,]) from shape=(1, 3) because the sum/max result is a vector
+    """
     def reduce_view_out(self, axis, keepdims=False):
         """ Return a view to the array set up for reduction functions and output array. """
         if isinstance(axis, tuple) and not axis:
@@ -537,7 +603,8 @@ class NDArray:
         if axis is None:
             view = self.compact().reshape((1,) * (self.ndim - 1) + (prod(self.shape),))
             #out = NDArray.make((1,) * self.ndim, device=self.device)
-            out = NDArray.make((1,), device=self.device)
+            out_shape = (1,) * self.ndim if keepdims else (1,)
+            out = NDArray.make(out_shape, device=self.device)
 
         else:
             if isinstance(axis, (tuple, list)):
@@ -571,10 +638,16 @@ class NDArray:
         Flip this ndarray along the specified axes.
         Note: compact() before returning.
         """
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
-
+        flip_strides = list(self.strides)
+        for axis in axes:
+            flip_strides[axis] *= -1
+        flip_strides = tuple(flip_strides)
+        flip_offset = self._offset
+        for axis in axes:
+            flip_offset += (self.shape[axis] - 1) * self.strides[axis]
+        out = NDArray.make(shape=self.shape, strides=flip_strides, offset=flip_offset, device=self.device, handle=self._handle)
+        out = out.compact()
+        return out
 
     def pad(self, axes):
         """
@@ -582,9 +655,12 @@ class NDArray:
         which lists for _all_ axes the left and right padding amount, e.g.,
         axes = ( (0, 0), (1, 1), (0, 0)) pads the middle axis with a 0 on the left and right side.
         """
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        newShape = tuple([s + l + r for (l, r), s in zip(axes, self.shape)])
+        out = NDArray.make(newShape, device=self.device)
+        out.fill(0)
+        newIndex = tuple([slice(l, l + s) for (l, r), s in zip(axes, self.shape)])
+        out[newIndex] = self
+        return out
 
 
 

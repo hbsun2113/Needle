@@ -81,6 +81,7 @@ def test_stack_forward(params, device):
 
     lhs = np.stack(to_stack_npy, axis=axis)
     rhs = ndl.stack(to_stack_ndl, axis=axis)
+    assert np.allclose(lhs, rhs.numpy())
 
 
 pad_params = [
@@ -98,6 +99,7 @@ def test_pad_forward(params, device):
     B = A.pad(padding)
 
     assert np.linalg.norm(A.numpy() - _A) < 1e-4
+    assert np.linalg.norm(B.numpy() - _B) < 1e-4
 
 
 flip_forward_params = [
@@ -118,11 +120,13 @@ def test_flip_forward(params, device):
     np.random.seed(0)
     shape, axes = params['shape'], params['axes']
     _A = np.random.randn(*shape)
+    _A = np.arange(_A.size).reshape(_A.shape)
     _B = np.flip(_A, axes)
     A = ndl.Tensor(_A, device=device)
     B = ndl.flip(A, axes=axes)
 
     assert np.linalg.norm(A.numpy() - _A) < 1e-4
+    assert np.linalg.norm(B.numpy() - _B) < 1e-4
 
 
 flip_backward_params = [
@@ -198,11 +202,13 @@ def test_dilate_forward(device):
     device = ndl.cpu()
 
     _A = np.random.randint(1, 10, size=(2, 5))
+    print("test_dilate_forward1:_A", _A)
     A = ndl.Tensor(_A, device=device)
     assert np.linalg.norm(ndl.dilate(A, dilation=0, axes=(0,)).numpy() - np.array([[6., 1., 4., 4., 8.],
-       [4., 6., 3., 5., 8.]])) < 1e-5 
+       [4., 6., 3., 5., 8.]])) < 1e-5
 
     _A = np.random.randint(1, 10, size=(2, 5))
+    print("test_dilate_forward2:_A", _A)
     A = ndl.Tensor(_A, device=device)
     assert np.linalg.norm(ndl.dilate(A, dilation=1, axes=(0,)).numpy() - np.array([[7., 9., 9., 2., 7.],
        [0., 0., 0., 0., 0.],
@@ -210,11 +216,13 @@ def test_dilate_forward(device):
        [0., 0., 0., 0., 0.]])) < 1e-5
 
     _A = np.random.randint(1, 10, size=(2, 5))
+    print("test_dilate_forward3:_A", _A)
     A = ndl.Tensor(_A, device=device)
     assert np.linalg.norm(ndl.dilate(A, dilation=1, axes=(1,)).numpy() - np.array([[9., 0., 5., 0., 4., 0., 1., 0., 4., 0.],
        [6., 0., 1., 0., 3., 0., 4., 0., 9., 0.]])) < 1e-5
 
     _A = np.random.randint(1, 10, size=(2, 5))
+    print("test_dilate_forward4:_A", _A)
     A = ndl.Tensor(_A, device=device)
     assert np.linalg.norm(ndl.dilate(A, dilation=1, axes=(0,1)).numpy() - np.array([[2., 0., 4., 0., 4., 0., 4., 0., 8., 0.],
        [0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
@@ -222,6 +230,7 @@ def test_dilate_forward(device):
        [0., 0., 0., 0., 0., 0., 0., 0., 0., 0.]])) < 1e-5
 
     _A = np.random.randint(1, 10, size=(2, 2))
+    print("test_dilate_forward5:_A", _A)
     A = ndl.Tensor(_A, device=device)
     assert np.linalg.norm(ndl.dilate(A, dilation=2, axes=(0,1)).numpy() - np.array([[4., 0., 0., 3., 0., 0.],
        [0., 0., 0., 0., 0., 0.],
@@ -441,6 +450,9 @@ def test_op_conv(Z_shape, W_shape, stride, padding, backward, device):
     if backward:
         err1 = np.linalg.norm(Ztch.grad.numpy() - Z.grad.numpy())
         err2 = np.linalg.norm(Wtch.grad.numpy() - W.grad.numpy())
+    # print("\nout2:", out2.detach().numpy())
+    # print("\ny2:", y2.numpy())
+    # print("\ndiff:", out2.detach().numpy() - y2.numpy())
     err3 = np.linalg.norm(out2.detach().numpy() - y2.numpy())
     if backward:
         assert err1 < 1e-2, "input grads match"
