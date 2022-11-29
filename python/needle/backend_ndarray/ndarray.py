@@ -568,7 +568,7 @@ class NDArray:
             out = NDArray.make((a.shape[0], b.shape[1], t, t), device=self.device)
             self.device.matmul_tiled(a._handle, b._handle, out._handle, m, n, p)
 
-            print("tiled matmul", a.shape, b.shape, out.shape)
+            # print("tiled matmul", a.shape, b.shape, out.shape)
             return (
                 out.permute((0, 2, 1, 3))
                 .compact()
@@ -580,7 +580,7 @@ class NDArray:
             self.device.matmul(
                 self.compact()._handle, other.compact()._handle, out._handle, m, n, p
             )
-            print("untiled matmul", m, n, p)
+            # print("untiled matmul", m, n, p)
             return out
 
     ### Reductions, i.e., sum/max over all element or over given axis

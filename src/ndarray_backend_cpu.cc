@@ -226,7 +226,7 @@ void ScalarMul(const AlignedArray& a, scalar_t val, AlignedArray* out) {
   /**
    * Set entries in out to be the product of corresponding entry in a plus the scalar val.
    */
-   std::cout<<"ScalarMul gointo"<<a.size<<" "<<val<<" "<<out->size<<std::endl;
+   //std::cout<<"ScalarMul gointo"<<a.size<<" "<<val<<" "<<out->size<<std::endl;
     ScalarBinaryOp(a, val, out, [](scalar_t a, scalar_t b) { return a * b; });
 }
 

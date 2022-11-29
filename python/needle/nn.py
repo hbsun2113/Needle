@@ -91,7 +91,7 @@ class Linear(Module):
 
     def forward(self, X: Tensor) -> Tensor:
         if X.shape[-1] != self.weight.shape[0]:
-            print("Shape mismatch, expected", self.weight.shape[0], "got", X.shape[1])
+            print("Shape mismatch, expected", self.weight.shape[0], "got", X.shape[-1])
             X = ops.reshape(X, (-1, self.weight.shape[0]))
         out = ops.matmul(X, self.weight)
         if self.bias is not None:
@@ -151,7 +151,7 @@ class SoftmaxLoss(Module):
         # Otherwise, if we divide the Tensor only contains one element by another scalar, we will get a Tensor of float64.
         # The final solution: https://forum.dlsyscourse.org/t/q3-tensor-dtype-mismatch/2297/3
         log_sum_exp = ops.logsumexp(logits, 1)
-        y_one_hot = init.one_hot(logits.shape[1], y)
+        y_one_hot = init.one_hot(logits.shape[1], y, device=logits.device, dtype=logits.dtype)
         Zy = ops.summation(ops.multiply(logits, y_one_hot), 1)
         loss = ops.summation(ops.negate(Zy) + log_sum_exp, 0)
         loss = loss / Tensor(logits.shape[0], dtype=loss.dtype, device=loss.device).data
@@ -174,12 +174,12 @@ class BatchNorm1d(Module):
 
     def forward(self, x: Tensor) -> Tensor:
         if self.training:
-            Ex = ops.summation(x, 0) / Tensor(x.shape[0], dtype=x.dtype, device=x.device).data
+            Ex = ops.summation(x, 0) / np.float32(x.shape[0])
             self.running_mean = ops.mul_scalar(self.running_mean, 1 - self.momentum).data + ops.mul_scalar(Ex, self.momentum).data
             Ex = ops.reshape(Ex, (1, x.shape[1]))
             Ex = ops.broadcast_to(Ex, x.shape)
 
-            Vx = ops.summation(ops.power_scalar(x + ops.negate(Ex), 2), 0) / Tensor(x.shape[0], dtype=x.dtype, device=x.device).data
+            Vx = ops.summation(ops.power_scalar(x + ops.negate(Ex), 2), 0) / np.float32(x.shape[0])
             self.running_var = ops.mul_scalar(self.running_var, 1 - self.momentum).data + ops.mul_scalar(Vx, self.momentum).data
             Vx = ops.reshape(Vx, (1, x.shape[1]))
             Vx = ops.broadcast_to(Vx, x.shape)
@@ -217,9 +217,9 @@ class BatchNorm2d(BatchNorm1d):
     def forward(self, x: Tensor):
         # nchw -> nhcw -> nhwc
         s = x.shape
-        _x = x.transpose((1, 2)).transpose((2, 3)).reshape((s[0] * s[2] * s[3], s[1]))
-        y = super().forward(_x).reshape((s[0], s[2], s[3], s[1]))
-        return y.transpose((2,3)).transpose((1,2))
+        _x = x.transpose((1, 2)).transpose((2, 3)).reshape((s[0] * s[2] * s[3], s[1]))  # hbsun:(n*h*w, c)
+        y = super().forward(_x).reshape((s[0], s[2], s[3], s[1]))  # hbsun:(n, h, w, c)
+        return y.transpose((2,3)).transpose((1,2))  # hbsun:(n, c, h, w)
 
 
 class LayerNorm1d(Module):
@@ -283,6 +283,17 @@ class Add(Module):
     def forward(self, x: Tensor) -> Tensor:
         return self.fn1(x) + self.fn2(x)
 
+
+class ConvBN(Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, bias=True, device=None, dtype="float32"):
+        self.conv = Conv(in_channels, out_channels, kernel_size, stride, bias, device, dtype)  # parameter count: in_channels * out_channels * kernel_size * kernel_size + out_channels
+        self.bn = BatchNorm2d(out_channels, device=device, dtype=dtype)   # parameter count: 2 * out_channels
+        self.relu = ReLU()
+
+    def forward(self, x):
+        return self.relu(self.bn(self.conv(x)))
+
+
 class Conv(Module):
     """
     Multi-channel 2D convolutional layer
@@ -302,7 +313,7 @@ class Conv(Module):
         self.kernel_size = kernel_size
         self.stride = stride
 
-        self.weight = Parameter(init.kaiming_uniform(fan_in=in_channels*kernel_size*kernel_size,
+        self.weight = Parameter(init.kaiming_uniform_conv(fan_in=in_channels*kernel_size*kernel_size,
                                                      fan_out=out_channels*kernel_size*kernel_size,
                                                      shape=(kernel_size, kernel_size, in_channels, out_channels),
                                                      device=device,
@@ -310,7 +321,7 @@ class Conv(Module):
 
         if bias:
             notUsed = 1
-            self.bias = Parameter(init.xavier_uniform(fan_in=notUsed,
+            self.bias = Parameter(init.xavier_uniform_conv(fan_in=notUsed,
                                                       fan_out=notUsed,
                                                       shape=(kernel_size, kernel_size, in_channels, out_channels),
                                                       gain=notUsed,
@@ -320,7 +331,9 @@ class Conv(Module):
             self.bias = None
 
     def forward(self, x: Tensor) -> Tensor:
-        # N, C, H, W = x.shape
+        N, C, H, W = x.shape
+        if H != W:
+            raise ValueError("Only square images are supported")
         # print("N:", N, "C:", C, "H:", H, "W:", W)
 
         # from nchw to nhwc

@@ -68,20 +68,14 @@ def ones_like(array, *, device=None, requires_grad=False):
     )
 
 
-def xavier_uniform(fan_in, fan_out, shape=None, gain=1.0, **kwargs):
+def xavier_uniform_conv(fan_in, fan_out, shape=None, gain=1.0, **kwargs):
     k, _, c_in, c_out = shape
     bound = 1.0 / math.sqrt(c_in * k * k)
     newShape = (c_out, )
     return rand(*newShape, low=-bound, high=bound, **kwargs)
 
 
-def xavier_normal(fan_in, fan_out, shape=None, gain=1.0, **kwargs):
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
-
-
-def kaiming_uniform(fan_in, fan_out, shape=None, nonlinearity="relu", **kwargs):
+def kaiming_uniform_conv(fan_in, fan_out, shape=None, nonlinearity="relu", **kwargs):
     assert nonlinearity == "relu", "Only relu supported currently"
     # common implementation of kaiming uniform
     # gain = math.sqrt(2.0)
@@ -95,8 +89,23 @@ def kaiming_uniform(fan_in, fan_out, shape=None, nonlinearity="relu", **kwargs):
     return rand(*shape, low=-bound, high=bound, **kwargs)
 
 
-def kaiming_normal(fan_in, fan_out, shape=None, nonlinearity="relu", **kwargs):
-    assert nonlinearity == "relu", "Only relu supported currently"
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
+def xavier_uniform(fan_in, fan_out, gain=1.0, **kwargs):
+    bound = gain * math.sqrt(6.0 / (fan_in + fan_out))
+    return rand(*(fan_in, fan_out), low=-bound, high=bound, **kwargs)
+
+
+def xavier_normal(fan_in, fan_out, gain=1.0, **kwargs):
+    std = gain * math.sqrt(2.0 / (fan_in + fan_out))
+    return randn(*(fan_in, fan_out), std=std, **kwargs)
+
+
+def kaiming_uniform(fan_in, fan_out, nonlinearity="relu", **kwargs):
+    gain = math.sqrt(2.0)
+    bound = gain * math.sqrt(3.0 / fan_in)
+    return rand(*(fan_in, fan_out), low=-bound, high=bound, **kwargs)
+
+
+def kaiming_normal(fan_in, fan_out, nonlinearity="relu", **kwargs):
+    gain = math.sqrt(2.0)
+    std = gain / math.sqrt(fan_in)
+    return randn(*(fan_in, fan_out), std=std, **kwargs)

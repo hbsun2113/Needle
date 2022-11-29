@@ -231,7 +231,7 @@ class BroadcastTo(TensorOp):
         # len(a.shape) = 1 and len(self.shape) > 1:
         if len(a.shape) == 1 and len(self.shape) > 1:
             extended_shape = [1] * (len(self.shape) - 1) + list(a.shape)
-            print("BroadcastTo::extended_shape", extended_shape)
+            # print("BroadcastTo::extended_shape", extended_shape)
             result = a.reshape(tuple(extended_shape))
         else:
             result = a
@@ -387,12 +387,11 @@ class ReLU(TensorOp):
         result = array_api.maximum(a, numpy.float32(0))
         return result
 
-    def gradient(self, out_grad, node):
-        out_grad_data = out_grad.realize_cached_data()
+    def gradient(self, out_grad:Tensor, node):
+        out_grad_data = out_grad.detach()
         lhs_data = node.inputs[0].realize_cached_data()
-        out_grad_data[lhs_data < 0] = 0
-        # assert out_grad.dtype == np.float32
-        return out_grad
+        mask = Tensor(lhs_data > 0, device=out_grad.device)
+        return multiply(out_grad_data, mask),
 
 
 def relu(a):

@@ -10,14 +10,43 @@ np.random.seed(0)
 class ResNet9(ndl.nn.Module):
     def __init__(self, device=None, dtype="float32"):
         super().__init__()
-        ### BEGIN YOUR SOLUTION ###
-        raise NotImplementedError() ###
-        ### END YOUR SOLUTION
+        self.layer1 = nn.ConvBN(3, 16, 7, 4, device=device, dtype=dtype)
+        self.layer2 = nn.ConvBN(16, 32, 3, 2, device=device, dtype=dtype)
+
+        self.layer3 = nn.ConvBN(32, 32, 3, 1, device=device, dtype=dtype)
+        self.layer4 = nn.ConvBN(32, 32, 3, 1, device=device, dtype=dtype)
+
+        self.layer5 = nn.ConvBN(32, 64, 3, 2, device=device, dtype=dtype)
+        self.layer6 = nn.ConvBN(64, 128, 3, 2, device=device, dtype=dtype)
+
+        self.layer7 = nn.ConvBN(128, 128, 3, 1, device=device, dtype=dtype)
+        self.layer8 = nn.ConvBN(128, 128, 3, 1, device=device, dtype=dtype)
+
+        self.layer9 = nn.Linear(128, 128, device=device, dtype=dtype)
+        self.layer10 = nn.ReLU()
+        self.layer11 = nn.Linear(128, 10, device=device, dtype=dtype)
 
     def forward(self, x):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        res = x
+        res = self.layer1(res)
+        res = self.layer2(res)
+        y = res
+        res = self.layer3(res)
+        res = self.layer4(res)
+        res += y
+        res = self.layer5(res)
+        res = self.layer6(res)
+        y = res
+        res = self.layer7(res)
+        res = self.layer8(res)
+        res += y
+
+        # flatten before linear
+        res = res.reshape((np.prod(res.shape)//128, 128))
+        res = self.layer9(res)
+        res = self.layer10(res)
+        res = self.layer11(res)
+        return res
 
 
 class LanguageModel(nn.Module):
