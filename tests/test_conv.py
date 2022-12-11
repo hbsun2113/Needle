@@ -170,7 +170,7 @@ def test_init_kaiming_uniform(device):
     _A = np.random.randn(3, 3, 16, 8)
     A = ndl.Tensor(_A, device=device)
     np.random.seed(0)
-    A = ndl.init.kaiming_uniform(16*9, 8*9, shape=A.shape)
+    A = ndl.init.kaiming_uniform_conv(16*9, 8*9, shape=A.shape)
     assert abs(A.sum().numpy() - -2.5719218) < 1e-4
 
 

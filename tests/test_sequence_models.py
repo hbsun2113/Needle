@@ -235,10 +235,12 @@ def test_language_model_training(device):
     model = LanguageModel(30, len(corpus.dictionary), hidden_size=hidden_size, num_layers=num_layers, seq_model=seq_model, device=device)
     train_acc, train_loss = train_ptb(model, train_data, seq_len=seq_len, n_epochs=n_epochs, device=device)
     test_acc, test_loss = evaluate_ptb(model, train_data, seq_len=seq_len, device=device)
-    if str(device) == "cpu(0)":
+    print("loss: ", train_loss, test_loss, str(device))
+    if str(device) == "cpu()":
+        print("go into cpu")
         np.testing.assert_allclose(5.4136161980805575, train_loss, atol=1e-5, rtol=1e-5)
         np.testing.assert_allclose(5.214852703942193, test_loss, atol=1e-5, rtol=1e-5)
-    elif str(device) == "cuda(0)":
+    elif str(device) == "cuda()":
         np.testing.assert_allclose(5.424638041743526, train_loss, atol=1e-5, rtol=1e-5)
         np.testing.assert_allclose(5.23579544491238, test_loss, atol=1e-5, rtol=1e-5)
 
@@ -333,6 +335,7 @@ def submit_language_model():
         print('You need a GPU to run some of these tests.')
     for (device, seq_length, num_layers, batch_size, embedding_size, hidden_size, seq_model, output_size) in itertools.product(
         devices, TEST_SEQ_LENGTHS, TEST_NUM_LAYERS, TEST_BATCH_SIZES, TEST_EMBEDDING_SIZES, TEST_HIDDEN_SIZES, TEST_SEQ_MODEL, TEST_OUTPUT_SIZES):
+        print("device: ", device, "seq_length: ", seq_length, "num_layers: ", num_layers, "batch_size: ", batch_size, "embedding_size: ", embedding_size, "hidden_size: ", hidden_size, "seq_model: ", seq_model, "output_size: ", output_size)
         x = np.random.randint(0, output_size, (seq_length, batch_size)).astype(np.float32)
         h0 = ndl.Tensor(np.random.randn(num_layers, batch_size, hidden_size).astype(np.float32), device=device)
         c0 = ndl.Tensor(np.random.randn(num_layers, batch_size, hidden_size).astype(np.float32), device=device)
@@ -365,6 +368,7 @@ def submit_language_model():
         seq_model=seq_model, device=device)
     train_acc, train_loss = train_ptb(model, train_data, seq_len=seq_len, n_epochs=n_epochs, device=device)
     test_acc, test_loss = evaluate_ptb(model, train_data, seq_len=seq_len, device=device)
+    print("train_loss: ", train_loss, "test_loss: ", test_loss)
     mugrade_submit(train_loss)
     mugrade_submit(test_loss)
 

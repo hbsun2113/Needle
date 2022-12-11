@@ -109,3 +109,8 @@ def kaiming_normal(fan_in, fan_out, nonlinearity="relu", **kwargs):
     gain = math.sqrt(2.0)
     std = gain / math.sqrt(fan_in)
     return randn(*(fan_in, fan_out), std=std, **kwargs)
+
+
+def rnn_uniform(fan_in, fan_out, k, **kwargs):
+    bound = math.sqrt(k)
+    return rand(*(fan_in, fan_out), low=-bound, high=bound, **kwargs)

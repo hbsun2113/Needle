@@ -17,7 +17,7 @@ class MakeTensorTuple(TensorTupleOp):
 
     def gradient(self, out_grad, node):
         assert isinstance(out_grad, TensorTuple)
-        return tuple([out_grad[i].realize_cached_data() for i in range(len(out_grad))])
+        return tuple([out_grad[i] for i in range(len(out_grad))])
 
 
 def make_tuple(*args):
@@ -375,7 +375,7 @@ class Exp(TensorOp):
         lhs = Tensor(node.inputs[0])
         result = multiply(out_grad, exp(lhs)),
         # assert result[0].dtype == np.float32
-        return result,
+        return result
 
 
 def exp(a):
@@ -520,12 +520,12 @@ class Split(TensorTupleOp):
         ans = []
         for i in range(result.shape[0]):
             index[0] = slice(i, i+1, 1)
-            tmp = Tensor(result[tuple(index)], device=A.device)
+            tmp = result[tuple(index)].compact()
             newShape = list(tmp.shape)
             newShape.pop(0)
             tmp = tmp.reshape(newShape)
             ans.append(tmp)
-        return make_tuple(*ans)
+        return ans
 
     def gradient(self, out_grad, node):
         return stack(out_grad, self.axis),

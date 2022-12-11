@@ -350,6 +350,9 @@ class Tensor(Value):
     def __neg__(self):
         return needle.ops.Negate()(self)
 
+    def exp(self):
+        return needle.ops.Exp()(self)
+
     def transpose(self, axes=None):
         return needle.ops.Transpose(axes)(self)
 
@@ -394,7 +397,13 @@ def compute_gradient_of_variables(output_tensor, out_grad):
         for k, g in zip(i.inputs, gradients):
             if k not in node_to_output_grads_list:
                 node_to_output_grads_list[k] = []
-            node_to_output_grads_list[k].append(g)
+            # hbsun: if it comes from split, its gradient will be TensorTuple,
+            # where only one element has real value. So we need append the whole TensorTuple,
+            # then line:386 will add up all TensorTuple together, and every element will have real value.
+            if isinstance(k.op, needle.Split):
+                node_to_output_grads_list[k].append(gradients)
+            else:
+                node_to_output_grads_list[k].append(g)
 
 
 def find_topo_sort(node_list: List[Value]) -> List[Value]:
