@@ -1,2 +1,3 @@
-# Homework 4
-Public repository and stub/testing code for Homework 4 of 10-714.
+Needle is a comprehensive deep learning library designed and implemented from scratch. It features automatic differentiation of computational graphs, GPU hardware acceleration, and support for various loss functions, data loaders, and optimizers. Additionally, Needle includes implementations of several common neural networks, such as CNNs, RNNs, LSTMs, and Transformers.
+
+I developed most of the code while completing assignments for [Deep Learning Systems](https://dlsyscourse.org/) course.
